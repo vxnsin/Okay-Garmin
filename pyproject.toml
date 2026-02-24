@@ -1,0 +1,20 @@
+[project]
+name = "okay-garmin"
+version = "0.1.0"
+description = "A Python Programm that uses a Voice Activation."
+readme = "README.md"
+requires-python = ">=3.13"
+authors = [
+    { name = "Vensin", email = "vxnsin@icloud.com" },
+]
+dependencies = [
+    "keyboard>=0.13.5",
+    "pillow>=12.1.1",
+    "pyaudio>=0.2.14",
+    "pyinstaller>=6.19.0",
+    "pynput>=1.8.1",
+    "pystray>=0.19.5",
+    "pywin32>=311",
+    "simpleaudio>=1.0.4",
+    "speechrecognition>=3.14.5",
+]
