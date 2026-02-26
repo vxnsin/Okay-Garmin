@@ -1,323 +1,493 @@
 import os
 import sys
 import json
-import time
 import threading
-from pathlib import Path
-import tkinter as tk
+import time
+import re
 
-from PIL import Image
+import requests
+import webview
 import pystray
 from pystray import MenuItem as item
-
+from PIL import Image
 import speech_recognition as sr
 from pynput import keyboard
 from difflib import SequenceMatcher
+import tkinter as tk
+from tkinter import filedialog
+import winsound
+import winreg
+import shutil
+from winotify import Notification
 
-# Soundabspielung
-try:
-    import simpleaudio as sa
-except ImportError:
-    sa = None
-    print("❌ simpleaudio nicht gefunden. Soundeffekte werden nicht abgespielt.")
+sys.stdout.reconfigure(encoding="utf-8")
 
 # ----------------------------
-# CONFIG
+# PATH SETUP
 # ----------------------------
-WAKE_WORD = "okay garmin video speichern"
-COOLDOWN = 2
-last_pressed = 0
 
-CONFIG_PATH = Path(os.environ["APPDATA"]) / "GarminVoiceKey" / "config.json"
-CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+BASE_PATH = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else os.path.abspath(__file__))
+CONFIG_PATH = os.path.join(BASE_PATH, "config.json")
+SOUND_PATH = os.path.join(BASE_PATH, "sounds")
 
+APP_VERSION = "v1.3"
+
+
+# ----------------------------
+# DEFAULT CONFIG
+# ----------------------------
+
+default_config = {
+    "sound_enabled": True,
+    "voice_commands": [
+        {"command": "video speichern", "type": "hotkey", "value": "ctrl+alt+f8"}
+    ]
+}
+
+
+config = {}
 
 def load_config():
-    if CONFIG_PATH.exists():
-        with open(CONFIG_PATH, "r") as f:
-            return json.load(f)
-    return {"hotkey": ["ctrl", "alt", "f8"], "voice_enabled": True}
+    global config
+    if not os.path.exists(CONFIG_PATH):
+        config = default_config.copy()
+        save_config()
+        print("📄 Neue config.json erstellt")
+    else:
+        try:
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                config = json.load(f)
+        except:
+            config = default_config.copy()
+            save_config()
+            print("⚠️ Config defekt – neu erstellt")
+
+def save_config():
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=4, ensure_ascii=False)
+
+def set_autostart(enable=True):
+    path = sys.executable  # Pfad zur EXE
+    try:
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                             r"Software\Microsoft\Windows\CurrentVersion\Run",
+                             0, winreg.KEY_SET_VALUE)
+        if enable:
+            winreg.SetValueEx(key, "Okay-Garmin", 0, winreg.REG_SZ, path)
+        else:
+            try:
+                winreg.DeleteValue(key, "Okay-Garmin")
+            except FileNotFoundError:
+                pass
+        winreg.CloseKey(key)
+        print(f"Autostart {'aktiviert' if enable else 'deaktiviert'}")
+    except Exception as e:
+        print("❌ Autostart Fehler:", e)
+
+def add_to_startup(enable=True):
+    startup_dir = os.path.join(os.environ["APPDATA"], r"Microsoft\Windows\Start Menu\Programs\Startup")
+    exe_path = sys.executable
+    shortcut_path = os.path.join(startup_dir, "Okay-Garmin.lnk")
+    
+    if enable:
+        # Benutze winshell oder pywin32 für echte Shortcuts
+        try:
+            import pythoncom
+            from win32com.shell import shell, shellcon
+            shortcut = pythoncom.CoCreateInstance(
+                shell.CLSID_ShellLink, None,
+                pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink
+            )
+            shortcut.SetPath(exe_path)
+            shortcut.SetDescription("Okay-Garmin Autostart")
+            persist_file = shortcut.QueryInterface(pythoncom.IID_IPersistFile)
+            persist_file.Save(shortcut_path, 0)
+        except Exception as e:
+            print("❌ Startup-Shortcut Fehler:", e)
+    else:
+        if os.path.exists(shortcut_path):
+            os.remove(shortcut_path)
+
+# ----------------------------
+# GLOBAL STATE
+# ----------------------------
+
+WAKE_WORD = "okay garmin"
+COOLDOWN = 2
+last_trigger = 0
+waiting_for_command = False
+
+window = None
+tray_icon = None
 
 
-def save_config(config):
-    with open(CONFIG_PATH, "w") as f:
-        json.dump(config, f, indent=2)
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = BASE_PATH
 
-
-config = load_config()
-current_hotkey = config.get("hotkey", ["ctrl", "alt", "f8"])
-sound_enabled = config.get("sound_enabled", True)
+    return os.path.join(base_path, relative_path)
 
 # ----------------------------
 # SOUND
 # ----------------------------
-def play_sound():
-    if not sa:
+
+def play_sound(filename):
+    if not config.get("sound_enabled", True):
         return
     try:
-        if getattr(sys, "frozen", False):
-            base = sys._MEIPASS
+        path = os.path.join(SOUND_PATH, filename)
+        if os.path.exists(path):
+            winsound.PlaySound(path, winsound.SND_ASYNC | winsound.SND_FILENAME)
         else:
-            base = os.path.abspath(".")
-        sound_path = os.path.join(base, "sound.wav")
-        if os.path.exists(sound_path):
-            wave_obj = sa.WaveObject.from_wave_file(sound_path)
-            wave_obj.play()
+            print(f"❌ Sound nicht gefunden: {path}")
     except Exception as e:
-        print("❌ Fehler beim Abspielen des Sounds:", e)
-
-# ----------------------------
-# KEY NAMING
-# ----------------------------
-def key_to_name(key):
-    if isinstance(key, keyboard.Key):
-        mapping = {
-            "cmd": "windows",
-            "cmd_r": "windows",
-            "cmd_l": "windows",
-            "alt_l": "alt",
-            "alt_r": "alt",
-            "ctrl_l": "ctrl",
-            "ctrl_r": "ctrl",
-            "shift_l": "shift",
-            "shift_r": "shift",
-        }
-        name = str(key).replace("Key.", "")
-        return mapping.get(name, name)
-
-    if isinstance(key, keyboard.KeyCode):
-        if key.char and key.char.isprintable():
-            return key.char.lower()
-        if key.vk:
-            if 65 <= key.vk <= 90:
-                return chr(key.vk).lower()
-            if 48 <= key.vk <= 57:
-                return chr(key.vk)
-            if 112 <= key.vk <= 123:
-                return f"f{key.vk - 111}"
-        return f"vk_{key.vk}"
-
-    return str(key).lower()
-
-
-def hotkey_to_string(hotkey):
-    return "+".join(hotkey).lower()
+        print("❌ Sound Fehler:", e)
 
 
 # ----------------------------
-# GUI for Hotkey selection
+# HOTKEY EXECUTION
 # ----------------------------
-def show_hotkey_window():
-    win = tk.Toplevel()
-    win.title("Hotkey einstellen")
-    win.geometry("280x140")
-    win.attributes("-topmost", True)
-    win.resizable(False, False)
-    win.grab_set()
 
-    if getattr(sys, "frozen", False):
-        base = sys._MEIPASS
-    else:
-        base = os.path.abspath(".")
-    icon_path = os.path.join(base, "icon.ico")
-    if os.path.exists(icon_path):
-        win.iconbitmap(icon_path)
+def press_hotkey(combo_string):
+    keys = combo_string.lower().split("+")
+    controller = keyboard.Controller()
 
-    tk.Label(win, text="Drücke den gewünschten Hotkey:", font=("Segoe UI", 10)).pack(pady=10)
-    var = tk.StringVar(value="– warte auf Eingabe –")
-    tk.Label(win, textvariable=var, font=("Segoe UI", 14, "bold"), fg="#0078d7").pack(pady=4)
-    tk.Label(win, text="Modifier (Strg/Alt/Shift/Win) und eine Taste.", font=("Segoe UI", 8), fg="gray").pack()
+    key_map = {
+        "ctrl": keyboard.Key.ctrl,
+        "alt": keyboard.Key.alt,
+        "shift": keyboard.Key.shift,
+        "windows": keyboard.Key.cmd
+    }
 
-    modifiers = set()
-    current_key = [None]
-    finished = [False]
+    modifiers = [key_map[k] for k in keys if k in key_map]
+    main_key = next((k for k in keys if k not in key_map), None)
 
-    def on_press(key):
-        if finished[0]:
-            return
-        name = key_to_name(key)
-        if name in ["ctrl", "alt", "shift", "windows"]:
-            modifiers.add(name)
-        else:
-            current_key[0] = name
+    for m in modifiers:
+        controller.press(m)
 
-        combo = list(modifiers)
-        if current_key[0]:
-            combo.append(current_key[0])
-        var.set("+".join(combo) if combo else "– warte auf Eingabe –")
-
-    def on_release(key):
-        name = key_to_name(key)
-        if current_key[0] and name == current_key[0]:
-            final_hotkey = list(modifiers)
-            final_hotkey.append(current_key[0])
-            finished[0] = True
-
-            config["hotkey"] = final_hotkey
-            save_config(config)
-
-            global current_hotkey
-            current_hotkey = final_hotkey
-
-            combo_str = hotkey_to_string(final_hotkey)
-            var.set("Gespeichert: " + combo_str)
-
-            try:
-                icon.menu = build_menu()
-                icon.update_menu()
-            except:
-                pass
-
-            listener.stop()
-            win.after(1000, win.destroy)
-
-    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
-    listener.start()
-    win.protocol("WM_DELETE_WINDOW", lambda: (listener.stop(), win.destroy()))
-
-# ----------------------------
-# MAIN UI
-# ----------------------------
-root = tk.Tk()
-root.withdraw()
-
-# ----------------------------
-# TRAY ICON
-# ----------------------------
-def load_tray_icon():
-    if getattr(sys, "frozen", False):
-        base = sys._MEIPASS
-    else:
-        base = os.path.abspath(".")
-    icon_path = os.path.join(base, "icon.ico")
-    if not os.path.exists(icon_path):
-        img = Image.new("RGB", (64, 64), color=(0, 120, 215))
-        return img
-    return Image.open(icon_path)
-
-
-def on_quit(icon, item):
-    icon.stop()
-    root.after(0, root.destroy)
-    os._exit(0)
-
-
-def toggle_sound(icon, item):
-    global sound_enabled
-    sound_enabled = not sound_enabled
-    config["sound_enabled"] = sound_enabled
-    save_config(config)
-    icon.menu = build_menu()
-    icon.update_menu()
-
-def on_change_hotkey(icon, item):
-    root.after(0, show_hotkey_window)
-
-
-def build_menu():
-    return pystray.Menu(
-        item("Hotkey ändern", on_change_hotkey),
-        item(f"Soundeffekt {'✅' if sound_enabled else '❌'}", toggle_sound),
-        item(f"Aktueller Hotkey: {hotkey_to_string(current_hotkey)}", lambda: None, enabled=False),
-        item("Beenden", on_quit)
-    )
-
-icon = pystray.Icon("GarminVoiceKey", load_tray_icon(), "Okay Garmin - by Vensin", menu=build_menu())
-
-# ----------------------------
-# VOICE THREAD
-# ----------------------------
-def press_hotkey():
-    combo = list(current_hotkey)
-    ctrl = keyboard.Controller()
-
-    if "ctrl" in combo:
-        ctrl.press(keyboard.Key.ctrl)
-    if "alt" in combo:
-        ctrl.press(keyboard.Key.alt)
-    if "shift" in combo:
-        ctrl.press(keyboard.Key.shift)
-    if "windows" in combo:
-        ctrl.press(keyboard.Key.cmd)
-
-    main_keys = [k for k in combo if k not in ["ctrl", "alt", "shift", "windows"]]
-    if main_keys:
-        key_name = main_keys[0]
+    if main_key:
         try:
-            if len(key_name) == 1:
-                ctrl.press(key_name)
-                ctrl.release(key_name)
-            elif key_name.startswith("vk_"):
-                vk = int(key_name[3:])
-                k = keyboard.KeyCode.from_vk(vk)
-                ctrl.press(k)
-                ctrl.release(k)
-            else:
-                k = getattr(keyboard.Key, key_name)
-                ctrl.press(k)
-                ctrl.release(k)
+            if len(main_key) == 1:
+                controller.press(main_key)
+                controller.release(main_key)
+            elif main_key.startswith("f"):
+                f = getattr(keyboard.Key, main_key)
+                controller.press(f)
+                controller.release(f)
         except:
             pass
 
-    if "ctrl" in combo:
-        ctrl.release(keyboard.Key.ctrl)
-    if "alt" in combo:
-        ctrl.release(keyboard.Key.alt)
-    if "shift" in combo:
-        ctrl.release(keyboard.Key.shift)
-    if "windows" in combo:
-        ctrl.release(keyboard.Key.cmd)
+    for m in reversed(modifiers):
+        controller.release(m)
 
 
-def contains_wakeword(text, wake_word, threshold=0.7):
+# ----------------------------
+# FUZZY MATCHING
+# ----------------------------
+
+def fuzzy_contains(text, phrase, threshold=0.7):
     words = text.split()
-    wake_words = wake_word.split()
-    n = len(wake_words)
+    phrase_words = phrase.split()
+    n = len(phrase_words)
+
     for i in range(len(words) - n + 1):
         segment = " ".join(words[i:i+n])
-        ratio = SequenceMatcher(None, segment, wake_word).ratio()
-        if ratio >= threshold:
+        if SequenceMatcher(None, segment, phrase).ratio() >= threshold:
             return True
     return False
 
 
-def voice_thread():
-    global last_pressed
-    r = sr.Recognizer()
+# ----------------------------
+# VOICE LOOP
+# ----------------------------
+
+def voice_loop():
+    global last_trigger, waiting_for_command
+
+    recognizer = sr.Recognizer()
     mic = sr.Microphone()
+
     with mic as source:
-        r.adjust_for_ambient_noise(source)
-        print("🎙️ - Sprachüberwachung aktiv...")
+        recognizer.adjust_for_ambient_noise(source)
+
+    print("🎙 Sprachüberwachung aktiv...")
 
     while True:
         try:
             with mic as source:
-                audio = r.listen(source)
-            text = r.recognize_google(audio, language="de-DE").lower()
-            print("🗣️ Erkannt:", text)
+                audio = recognizer.listen(source)
 
-            if contains_wakeword(text, WAKE_WORD, threshold=0.7):
-                now = time.time()
-                if now - last_pressed >= COOLDOWN:
-                    press_hotkey()
-                    last_pressed = now
-                    if sound_enabled:
-                        play_sound()
+            text = recognizer.recognize_google(audio, language="de-DE").lower()
+            print("🗣 Erkannt:", text)
 
-                    print(f"✅ Wakeword erkannt! Hotkey '{hotkey_to_string(current_hotkey)}' ausgeführt")
-                else:
-                    print("⏳ Cooldown aktiv")
+            now = time.time()
+            if now - last_trigger < COOLDOWN:
+                continue
+
+            if not waiting_for_command and fuzzy_contains(text, WAKE_WORD):
+                play_sound("trigger.wav")
+                waiting_for_command = True
+                last_trigger = now
+                print("✅ Wakeword erkannt")
+
+            elif waiting_for_command:
+                executed = False
+
+                for cmd in config.get("voice_commands", []):
+                    if fuzzy_contains(text, cmd["command"]):
+
+                        if cmd["type"] == "hotkey":
+                            press_hotkey(cmd["value"])
+
+                        elif cmd["type"] in ["file", "folder", "run"]:
+                            if os.path.exists(cmd["value"]):
+                                os.startfile(cmd["value"])
+
+                        play_sound("action.wav")
+                        executed = True
+                        print(f"🎯 Befehl '{cmd['command']}' ausgeführt")
+                        break
+
+                if not executed:
+                    print("❌ Unbekannter Befehl")
+
+                waiting_for_command = False
+                last_trigger = now
+
         except sr.UnknownValueError:
             pass
         except Exception as e:
-            print("❌ Fehler bei Spracherkennung:", e)
+            print("❌ Voice Fehler:", e)
             time.sleep(1)
 
 
 # ----------------------------
-# START THREADS
+# WEBVIEW API
 # ----------------------------
-threading.Thread(target=voice_thread, daemon=True).start()
-threading.Thread(target=icon.run, daemon=True).start()
 
-root.mainloop()
+class Api:
+
+    def get_config(self):
+        return config
+
+    def save_config(self, new_config):
+        global config
+        config = new_config
+        save_config()
+        print("💾 Config gespeichert")
+        return {"status": "ok"}
+
+    def pick_path(self, type_):
+        root = tk.Tk()
+        root.withdraw()
+        path = None
+
+        try:
+            if type_ in ["file", "run"]:
+                path = filedialog.askopenfilename()
+            elif type_ == "folder":
+                path = filedialog.askdirectory()
+        finally:
+            root.destroy()
+
+        return path
+
+    def get_version(self):
+        try:
+            response = requests.get(
+                "https://github.com/vxnsin/Okay-Garmin/releases/latest",
+                timeout=5,
+                allow_redirects=True
+            )
+
+            match = re.search(r'/tag/(v[\d.]+)', response.url)
+            latest = match.group(1) if match else APP_VERSION
+
+            return {
+                "current": APP_VERSION,
+                "latest": latest,
+                "update_available": latest != APP_VERSION
+            }
+
+        except:
+            return {
+                "current": APP_VERSION,
+                "latest": APP_VERSION,
+                "update_available": False
+            }
+    def get_autostart(self):
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                 r"Software\Microsoft\Windows\CurrentVersion\Run",
+                                 0, winreg.KEY_READ)
+            value, _ = winreg.QueryValueEx(key, "Okay-Garmin")
+            winreg.CloseKey(key)
+            return os.path.exists(value) or value == sys.executable
+        except FileNotFoundError:
+            return False
+        except Exception as e:
+            print("❌ Autostart Check Fehler:", e)
+            return False
+
+    def set_autostart(self, enable: bool):
+        set_autostart(enable)
+        return {"status": "ok", "enabled": enable}
+
+# ----------------------------
+# TRAY ICON
+# ----------------------------
+
+def load_icon():
+    if getattr(sys, "frozen", False):
+        exe_path = sys.executable
+        try:
+            import win32api
+            import win32gui
+            import win32con
+            large, small = win32gui.ExtractIconEx(exe_path, 0)
+            if large:
+                import io
+                from PIL import ImageWin
+                hicon = large[0]
+                info = win32gui.GetIconInfo(hicon)
+                bmp = ImageWin.Bitmap(hicon)
+                img = Image.frombitmap(bmp)  # PIL Image
+                return img
+        except Exception as e:
+            print("❌ EXE Icon Fehler:", e)
+
+    path = resource_path("icon.ico")
+    if os.path.exists(path):
+        return Image.open(path)
+
+    return Image.new("RGB", (64, 64), color=(0, 120, 215))
+
+
+def open_settings(icon=None, item=None):
+    global window
+    if window:
+        window.show()
+        window.restore()
+
+
+def on_quit(icon, item):
+    icon.stop()
+    if window:
+        try:
+            window.destroy()
+        except:
+            pass
+    os._exit(0)
+
+
+
+def build_menu():
+    return pystray.Menu(
+        item("Made by Vensin", lambda: None, enabled=False),
+        item("Einstellungen", open_settings),
+        item("Beenden", on_quit)
+    )
+
+
+# ----------------------------
+# WEBVIEW
+# ----------------------------
+
+def create_window():
+    global window
+
+    html_path = resource_path(os.path.join("web", "index.html"))
+
+    window = webview.create_window(
+        "Okay-Garmin Einstellungen",
+        html_path,
+        js_api=Api(),
+        width=900,
+        height=600,
+        hidden=True,
+
+    )
+
+    def on_closing():
+        window.hide()
+        return False
+
+    window.events.closing += on_closing
+
+    return window
+
+
+def check_for_updates():
+    try:
+        response = requests.get(
+            "https://github.com/vxnsin/Okay-Garmin/releases/latest",
+            timeout=5,
+            allow_redirects=True
+        )
+
+        match = re.search(r'/tag/(v[\d.]+)', response.url)
+        if not match:
+            return
+
+        latest_version = match.group(1)
+
+        if latest_version != APP_VERSION:
+            print(f"🆕 Update verfügbar: {latest_version}")
+
+            toast = Notification(
+                app_id="Okay-Garmin",
+                title="Update verfügbar 🚀",
+                msg=f"Neue Version {latest_version} ist verfügbar.",
+                duration="short"
+            )
+
+            toast.show()
+
+    except Exception as e:
+        print("❌ Update Check Fehler:", e)
+
+# ----------------------------
+# START
+# ----------------------------
+
+if __name__ == "__main__":
+    load_config()
+
+    if getattr(sys, "frozen", False): 
+        try:
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Run",
+                0, winreg.KEY_READ
+            )
+            try:
+                value, _ = winreg.QueryValueEx(key, "Okay-Garmin")
+                print("✅ Autostart bereits gesetzt")
+            except FileNotFoundError:
+                set_autostart(True)
+            finally:
+                winreg.CloseKey(key)
+        except Exception as e:
+            print("❌ Autostart Check Fehler:", e)
+
+    create_window()
+
+    tray_icon = pystray.Icon(
+        "Okay-Garmin",
+        load_icon(),
+        "Okay-Garmin",
+        menu=build_menu()
+    )
+
+    threading.Thread(target=tray_icon.run, daemon=True).start()
+    threading.Thread(target=voice_loop, daemon=True).start()
+    threading.Thread(target=check_for_updates, daemon=True).start()
+
+    print("🚀 Okay-Garmin gestartet")
+
+    try:
+        webview.start(debug=False, menu=False)
+    except TypeError:
+        webview.start(debug=False)
