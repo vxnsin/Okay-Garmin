@@ -20,6 +20,7 @@ echo ==============================
 pyinstaller --onefile --noconsole ^
     --icon=icon.ico ^
     --add-data "web;web" ^
+    --add-data "icon.ico;." ^
     main.py
 
 REM -----------------------------
