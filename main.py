@@ -67,7 +67,7 @@ def save_config():
         json.dump(config, f, indent=4, ensure_ascii=False)
 
 def set_autostart(enable=True):
-    path = sys.executable  # Pfad zur EXE
+    path = sys.executable
     try:
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
                              r"Software\Microsoft\Windows\CurrentVersion\Run",
@@ -340,29 +340,8 @@ class Api:
 # ----------------------------
 
 def load_icon():
-    if getattr(sys, "frozen", False):
-        exe_path = sys.executable
-        try:
-            import win32api
-            import win32gui
-            import win32con
-            large, small = win32gui.ExtractIconEx(exe_path, 0)
-            if large:
-                import io
-                from PIL import ImageWin
-                hicon = large[0]
-                info = win32gui.GetIconInfo(hicon)
-                bmp = ImageWin.Bitmap(hicon)
-                img = Image.frombitmap(bmp)  # PIL Image
-                return img
-        except Exception as e:
-            print("❌ EXE Icon Fehler:", e)
-
     path = resource_path("icon.ico")
-    if os.path.exists(path):
-        return Image.open(path)
-
-    return Image.new("RGB", (64, 64), color=(0, 120, 215))
+    return Image.open(path)
 
 
 def open_settings(icon=None, item=None):
