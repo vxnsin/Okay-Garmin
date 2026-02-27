@@ -4,6 +4,7 @@ import json
 import threading
 import time
 import re
+from turtle import delay
 
 import requests
 import webview
@@ -19,6 +20,7 @@ import winsound
 import winreg
 import shutil
 from winotify import Notification
+import subprocess
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -30,8 +32,7 @@ BASE_PATH = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else
 CONFIG_PATH = os.path.join(BASE_PATH, "config.json")
 SOUND_PATH = os.path.join(BASE_PATH, "sounds")
 
-APP_VERSION = "v1.3"
-
+APP_VERSION = "v1.2"
 
 # ----------------------------
 # DEFAULT CONFIG
@@ -40,10 +41,14 @@ APP_VERSION = "v1.3"
 default_config = {
     "sound_enabled": True,
     "voice_commands": [
-        {"command": "video speichern", "type": "hotkey", "value": "ctrl+alt+f8"}
+        {
+            "command": "video speichern",
+            "type": "hotkey",
+            "value": "f8",
+            "delay": 0
+        }
     ]
 }
-
 
 config = {}
 
@@ -121,6 +126,14 @@ window = None
 tray_icon = None
 
 
+def run_path(path):
+    if path.lower().endswith(".bat"):
+        # Batch über cmd ausführen
+        subprocess.Popen(["cmd", "/c", path], shell=True)
+    else:
+        # Normale Datei öffnen
+        os.startfile(path)
+
 def resource_path(relative_path):
     try:
         base_path = sys._MEIPASS
@@ -182,7 +195,6 @@ def press_hotkey(combo_string):
     for m in reversed(modifiers):
         controller.release(m)
 
-
 # ----------------------------
 # FUZZY MATCHING
 # ----------------------------
@@ -202,6 +214,7 @@ def fuzzy_contains(text, phrase, threshold=0.7):
 # ----------------------------
 # VOICE LOOP
 # ----------------------------
+
 
 def voice_loop():
     global last_trigger, waiting_for_command
@@ -237,15 +250,20 @@ def voice_loop():
 
                 for cmd in config.get("voice_commands", []):
                     if fuzzy_contains(text, cmd["command"]):
+                        play_sound("action.wav")
+                        delay_sec  = cmd.get("delay", 0)
+
+                        if delay_sec  > 0:
+                            print(f"⏳ Warte {delay_sec} Sekunden vor Ausführung...")
+                            time.sleep(delay_sec)
 
                         if cmd["type"] == "hotkey":
                             press_hotkey(cmd["value"])
 
                         elif cmd["type"] in ["file", "folder", "run"]:
                             if os.path.exists(cmd["value"]):
-                                os.startfile(cmd["value"])
+                                run_path(cmd["value"])
 
-                        play_sound("action.wav")
                         executed = True
                         print(f"🎯 Befehl '{cmd['command']}' ausgeführt")
                         break
@@ -334,7 +352,16 @@ class Api:
     def set_autostart(self, enable: bool):
         set_autostart(enable)
         return {"status": "ok", "enabled": enable}
+    
+    def run_updater(self):
+        base_dir = os.path.dirname(sys.executable)
+        updater_path = os.path.join(base_dir, "update.exe")
 
+        if os.path.exists(updater_path):
+            subprocess.Popen([updater_path])
+            os._exit(0) 
+        return {"status": "error"}
+    
 # ----------------------------
 # TRAY ICON
 # ----------------------------
