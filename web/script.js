@@ -10,7 +10,6 @@ const keyMap = {
     Meta: "windows"
 };
 
-
 const ICONS = {
     file: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`,
     
@@ -21,18 +20,32 @@ const ICONS = {
     trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`
 };
 
+async function runUpdater() {
+    try {
+        const result = await window.pywebview.api.run_updater();
+        if (result.status === "error") {
+            alert("Update failed. Please try again.");
+        }
+    } catch (e) {
+        console.error("Update error:", e);
+        alert("Could not start updater.");
+    }
+}
+
 async function fetchLatestVersion() {
     try {
         if (window.pywebview && window.pywebview.api && window.pywebview.api.get_version) {
-
             const versionData = await window.pywebview.api.get_version();
             const versionElement = document.getElementById("versionDisplay");
+            const updateBtn = document.getElementById("updateBtn");
 
             if (versionData.update_available) {
-                versionElement.textContent = `${versionData.current} (Update)`;
+                versionElement.textContent = `${versionData.current}`;
                 versionElement.style.background = "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)";
+                if (updateBtn) updateBtn.style.display = "flex";
             } else {
                 versionElement.textContent = versionData.current;
+                if (updateBtn) updateBtn.style.display = "none";
             }
 
         } else {
@@ -46,7 +59,9 @@ async function fetchLatestVersion() {
 async function loadConfig() {
     config = await window.pywebview.api.get_config();
     document.getElementById("soundToggle").checked = config.sound_enabled;
-    document.getElementById("autostartToggle").checked = config.autostart_enabled;
+    const autostartEnabled = await window.pywebview.api.get_autostart();
+    document.getElementById("autostartToggle").checked = autostartEnabled;
+
     renderCommands();
     fetchLatestVersion();
 }
@@ -74,7 +89,7 @@ function renderCommands() {
 
         let valueField;
         if(cmd.type === "hotkey") {
-            valueField = `<input type="text" class="hotkey-input" readonly placeholder="Klicken zum Aufnehmen" 
+            valueField = `<input type="text" class="hotkey-input" readonly placeholder="Click to record" 
                 onclick="startHotkeyRecording(${index}, this)" value="${cmd.value}">`;
         } else {
             const icon = getIconForType(cmd.type);
@@ -89,19 +104,21 @@ function renderCommands() {
         }
 
         div.innerHTML = `
-            <input type="text" value="${cmd.command}" placeholder="Sprachbefehl (z.B. 'Öffne Editor')"
+            <input type="text" value="${cmd.command}" placeholder="Voice command (e.g., 'Open Editor')"
                 onchange="updateCommand(${index}, 'command', this.value)">
 
             <select onchange="updateCommandType(${index}, this.value)">
                 <option value="hotkey" ${cmd.type === "hotkey" ? "selected" : ""}>Hotkey</option>
-                <option value="file" ${cmd.type === "file" ? "selected" : ""}>Datei</option>
-                <option value="folder" ${cmd.type === "folder" ? "selected" : ""}>Ordner</option>
-                <option value="run" ${cmd.type === "run" ? "selected" : ""}>Programm</option>
+                <option value="file" ${cmd.type === "file" ? "selected" : ""}>File</option>
+                <option value="folder" ${cmd.type === "folder" ? "selected" : ""}>Folder</option>
+                <option value="run" ${cmd.type === "run" ? "selected" : ""}>Program</option>
             </select>
 
             ${valueField}
 
-            <button class="delete-btn" onclick="removeCommand(${index})" title="Löschen">
+            <input class="delay-field" type="number" min="0" placeholder="Delay (s)" value="${cmd.delay}" onchange="updateCommand(${index}, 'delay', parseInt(this.value))">
+
+            <button class="delete-btn" onclick="removeCommand(${index})" title="Delete">
                 ${ICONS.trash}
             </button>
         `;
@@ -112,19 +129,19 @@ function renderCommands() {
 
 function getPlaceholderForType(type) {
     switch(type) {
-        case 'file': return "Datei auswählen...";
-        case 'folder': return "Ordner auswählen...";
-        case 'run': return "Programm auswählen...";
-        default: return "Pfad auswählen...";
+        case 'file': return "Select file...";
+        case 'folder': return "Select folder...";
+        case 'run': return "Select program...";
+        default: return "Select path...";
     }
 }
 
 function getTooltipForType(type) {
     switch(type) {
-        case 'file': return "Datei durchsuchen";
-        case 'folder': return "Ordner durchsuchen";
-        case 'run': return "Programm auswählen";
-        default: return "Durchsuchen";
+        case 'file': return "Browse file";
+        case 'folder': return "Browse folder";
+        case 'run': return "Select program";
+        default: return "Browse";
     }
 }
 
@@ -169,7 +186,7 @@ function startHotkeyRecording(index, input) {
     if(input.classList.contains('recording')) return;
     
     input.classList.add('recording');
-    input.value = "Tasten drücken...";
+    input.value = "Press keys...";
     
     const modifiers = new Set();
     let mainKey = null;
@@ -179,12 +196,11 @@ function startHotkeyRecording(index, input) {
         if(!isRecording) return;
         e.preventDefault();
 
-
-            if (keyMap[e.key]) {
-                modifiers.add(keyMap[e.key]);
-                input.value = Array.from(modifiers).join("+") + (mainKey ? "+" + mainKey : "");
-                return;
-            }
+        if (keyMap[e.key]) {
+            modifiers.add(keyMap[e.key]);
+            input.value = Array.from(modifiers).join("+") + (mainKey ? "+" + mainKey : "");
+            return;
+        }
 
         if (!mainKey) {
             mainKey = e.key.length === 1 ? e.key.toLowerCase() : e.key;
@@ -237,12 +253,11 @@ function startHotkeyRecording(index, input) {
     setTimeout(() => window.addEventListener("click", clickOutside), 100);
 }
 
-// Autostart-Toggle Event
 document.getElementById("autostartToggle").addEventListener("change", async function() {
     try {
         await window.pywebview.api.set_autostart(this.checked);
     } catch (e) {
-        console.error("Autostart konnte nicht geändert werden:", e);
+        console.error("Autostart could not be changed:", e);
         this.checked = !this.checked; 
     }
 });

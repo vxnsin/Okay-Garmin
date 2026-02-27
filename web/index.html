@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Okay-Garmin Einstellungen</title>
+    <title>Okay-Garmin Settings</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -18,7 +18,7 @@
       <main>
         <section class="card">
           <div class="section-header">
-            <h2>Allgemein</h2>
+            <h2>General</h2>
             <span class="badge">System</span>
           </div>
 
@@ -26,7 +26,7 @@
             <div class="setting-info">
               <span class="setting-label">Autostart</span>
               <span class="setting-desc"
-                >Okay-Garmin beim Windows-Start automatisch starten</span
+                >Automatically start Okay-Garmin on Windows startup</span
               >
             </div>
             <label class="switch">
@@ -34,9 +34,9 @@
               <span class="slider"></span>
             </label>
             <div class="setting-info">
-              <span class="setting-label">Soundeffekte</span>
+              <span class="setting-label">Sound Effects</span>
               <span class="setting-desc"
-                >Akustische Rückmeldung bei Befehlen</span
+                >Audio feedback when commands are executed</span
               >
             </div>
             <label class="switch">
@@ -49,7 +49,7 @@
         <section class="card">
           <div class="section-header">
             <h2>Voice Commands</h2>
-            <span class="badge badge-secondary">Konfiguration</span>
+            <span class="badge badge-secondary">Configuration</span>
           </div>
 
           <div id="commandList"></div>
@@ -66,7 +66,7 @@
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
-            Command hinzufügen
+            Add Command
           </button>
         </section>
       </main>
@@ -75,7 +75,15 @@
         <div class="footer-content">
           <div class="version">
             <span class="version-label">Version</span>
-            <span id="versionDisplay" class="version-number">Laden...</span>
+            <span id="versionDisplay" class="version-number">Loading...</span>
+            <button id="updateBtn" class="update-btn" onclick="runUpdater()" style="display: none;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                <line x1="21" y1="5" x2="11" y2="15"></line>
+                <polyline points="15 5 21 5 21 11"></polyline>
+              </svg>
+              Update
+            </button>
           </div>
           <div class="footer-center">
             <a
@@ -105,7 +113,6 @@
         </div>
       </footer>
     </div>
-
-    <script src="script.js"></script>
+<script src="script.js"></script>
   </body>
 </html>

@@ -15,13 +15,19 @@ REM PyInstaller Build
 REM -----------------------------
 echo.
 echo ==============================
-echo    Running PyInstaller...
+echo  Build main.exe...
 echo ==============================
 pyinstaller --onefile --noconsole ^
     --icon=icon.ico ^
     --add-data "web;web" ^
     --add-data "icon.ico;." ^
     main.py
+
+REM -----------------------------
+REM Build update.exe
+REM -----------------------------
+pyinstaller --onefile --noconsole ^
+    update.py
 
 REM -----------------------------
 REM Release-Struktur erstellen
