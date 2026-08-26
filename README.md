@@ -14,6 +14,7 @@ This project allows you to trigger a key by saying the voice command:
 - [ ] Installer + Updater
 - [ ] Fix Autostart recognition
 - [ ] UI Update
+- [ ] Adding https://github.com/tronghieuit/tiny-tts
 ---
 ## 👤 Author
 
