@@ -1,118 +1,433 @@
 <!doctype html>
-<html lang="en">
+<html lang="de" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Okay-Garmin Settings</title>
-    <link rel="stylesheet" href="style.css" />
+    <title>Okay-Garmin</title>
+    <link rel="stylesheet" href="css/app.css" />
   </head>
   <body>
-    <div class="container">
-      <header>
-        <div class="logo">
-          <h1>Okay-Garmin</h1>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <svg viewBox="0 0 440 96" role="img" aria-label="Okay-Garmin">
+            <defs>
+              <linearGradient id="ogBrand" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="var(--brand)" />
+                <stop offset="100%" stop-color="var(--brand-2)" />
+              </linearGradient>
+            </defs>
+            <rect x="8" y="16" width="64" height="64" rx="18" fill="url(#ogBrand)" />
+            <g fill="#fff" opacity="0.96">
+              <rect x="21" y="41" width="5" height="14" rx="2.5" />
+              <rect x="30" y="33" width="5" height="30" rx="2.5" />
+              <rect x="39" y="26" width="5" height="44" rx="2.5" />
+              <rect x="48" y="35" width="5" height="26" rx="2.5" />
+              <rect x="57" y="43" width="5" height="10" rx="2.5" />
+            </g>
+            <text x="90" y="59" font-family="var(--font)" font-size="34" letter-spacing="-0.6">
+              <tspan fill="var(--text-dim)" font-weight="500">Okay-</tspan><tspan fill="url(#ogBrand)" font-weight="700">Garmin</tspan>
+            </text>
+            <text x="92" y="79" font-family="var(--font)" font-size="12.5" font-weight="500" letter-spacing="2.6" fill="var(--text-faint)" data-i18n="app.tagline">Sprachsteuerung</text>
+          </svg>
         </div>
-        <div class="subtitle">Voice Control</div>
-      </header>
 
-      <main>
-        <section class="card">
-          <div class="section-header">
-            <h2>General</h2>
-            <span class="badge">System</span>
+        <nav class="nav">
+          <button class="nav-item active" data-page="overview">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+            <span data-i18n="nav.overview">Übersicht</span>
+          </button>
+          <button class="nav-item" data-page="commands">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            <span data-i18n="nav.commands">Befehle</span>
+          </button>
+          <button class="nav-item" data-page="voice">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3l3-8 4 16 3-10 2 4h5"/></svg>
+            <span data-i18n="nav.voice">Sprache</span>
+          </button>
+          <button class="nav-item" data-page="music">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+            <span data-i18n="nav.music">Musik</span>
+          </button>
+          <button class="nav-item" data-page="about">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <span data-i18n="nav.about">Über</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-foot">
+          <div class="status-pill">
+            <i class="dot" id="sideDot"></i>
+            <span id="sideState">…</span>
+          </div>
+          <div class="version-line">
+            <span id="sideVersion">v–</span>
+            <span id="sideUpdate" hidden><i class="update-dot"></i></span>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <!-- ------------------------------------------------------ overview -->
+        <section class="page active" id="page-overview">
+          <div class="page-head">
+            <h1 data-i18n="overview.title">Status</h1>
+            <p data-i18n="overview.subtitle">Live-Anzeige der Spracherkennung</p>
           </div>
 
-          <div class="setting-row">
-            <div class="setting-info">
-              <span class="setting-label">Autostart</span>
-              <span class="setting-desc"
-                >Automatically start Okay-Garmin on Windows startup</span
-              >
+          <div class="banner" id="modelBanner" hidden>
+            <div class="grow">
+              <strong data-i18n="overview.models">Sprachmodelle</strong>
+              <div id="modelBannerText" class="row-desc"></div>
+              <div class="progress" id="modelProgress" hidden><i></i></div>
             </div>
-            <label class="switch">
-              <input type="checkbox" id="autostartToggle" />
-              <span class="slider"></span>
-            </label>
-            <div class="setting-info">
-              <span class="setting-label">Sound Effects</span>
-              <span class="setting-desc"
-                >Audio feedback when commands are executed</span
-              >
+            <button class="btn primary" id="modelDownloadBtn" data-i18n="overview.download">Jetzt laden</button>
+          </div>
+
+          <div class="status-card">
+            <div class="status-top">
+              <div>
+                <div class="status-state">
+                  <i class="dot" id="stateDot"></i>
+                  <strong id="stateText">…</strong>
+                </div>
+                <div class="status-hint" id="stateHint"></div>
+              </div>
+              <button class="btn" id="pauseBtn" data-i18n="overview.pause">Pausieren</button>
             </div>
-            <label class="switch">
-              <input type="checkbox" id="soundToggle" />
-              <span class="slider"></span>
-            </label>
+            <div class="meter" id="meter"></div>
+          </div>
+
+          <div class="card history">
+            <div class="history-label" data-i18n="overview.history">Zuletzt erkannt</div>
+            <div class="history-list" id="historyList">
+              <div class="empty-note" data-i18n="overview.history_empty">Noch nichts erkannt.</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2 data-i18n="overview.general">Allgemein</h2></div>
+
+            <div class="row" id="autostartRow">
+              <div class="row-text">
+                <span class="row-label" data-i18n="setting.autostart">Autostart</span>
+                <span class="row-desc" data-i18n="setting.autostart_desc"></span>
+              </div>
+              <div class="row-control">
+                <label class="switch"><input type="checkbox" id="autostartToggle" /><span></span></label>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label" data-i18n="setting.sound">Signaltöne</span>
+                <span class="row-desc" data-i18n="setting.sound_desc"></span>
+              </div>
+              <div class="row-control">
+                <label class="switch"><input type="checkbox" id="soundToggle" /><span></span></label>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label" data-i18n="setting.notifications">Benachrichtigungen</span>
+                <span class="row-desc" data-i18n="setting.notifications_desc"></span>
+              </div>
+              <div class="row-control">
+                <label class="switch"><input type="checkbox" id="notifyToggle" /><span></span></label>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label" data-i18n="setting.language">Sprache der Oberfläche</span>
+                <span class="row-desc" data-i18n="setting.language_desc"></span>
+              </div>
+              <div class="row-control">
+                <select id="uiLanguage">
+                  <option value="de">Deutsch</option>
+                  <option value="en">English</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label" data-i18n="setting.theme">Erscheinungsbild</span>
+                <span class="row-desc" data-i18n="setting.theme_desc"></span>
+              </div>
+              <div class="row-control">
+                <select id="themeSelect">
+                  <option value="dark">Dark</option>
+                  <option value="light">Light</option>
+                </select>
+              </div>
+            </div>
           </div>
         </section>
 
-        <section class="card">
-          <div class="section-header">
-            <h2>Voice Commands</h2>
-            <span class="badge badge-secondary">Configuration</span>
+        <!-- ------------------------------------------------------ commands -->
+        <section class="page" id="page-commands">
+          <div class="page-head">
+            <h1 data-i18n="commands.title">Sprachbefehle</h1>
+            <p data-i18n="commands.subtitle"></p>
           </div>
 
           <div id="commandList"></div>
 
-          <button class="add-btn" onclick="addCommand()">
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            Add Command
+          <button class="btn primary" id="addCommandBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span data-i18n="commands.add">Befehl hinzufügen</span>
           </button>
         </section>
-      </main>
 
-      <footer>
-        <div class="footer-content">
-          <div class="version">
-            <span class="version-label">Version</span>
-            <span id="versionDisplay" class="version-number">Loading...</span>
-            <button id="updateBtn" class="update-btn" onclick="runUpdater()" style="display: none;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
-                <line x1="21" y1="5" x2="11" y2="15"></line>
-                <polyline points="15 5 21 5 21 11"></polyline>
-              </svg>
-              Update
-            </button>
+        <!-- --------------------------------------------------------- voice -->
+        <section class="page" id="page-voice">
+          <div class="page-head">
+            <h1 data-i18n="voice.title">Spracherkennung</h1>
+            <p data-i18n="voice.subtitle"></p>
           </div>
-          <div class="footer-center">
-            <a
-              href="https://github.com/vxnsin/Okay-Garmin"
-              target="_blank"
-              class="github-link"
-              title="GitHub Repository"
-            >
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-              >
-                <path
-                  d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
-                />
-              </svg>
-            </a>
+
+          <div class="card">
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label" data-i18n="voice.stt_language">Erkennungssprache</span>
+                <span class="row-desc" data-i18n="voice.stt_language_desc"></span>
+              </div>
+              <div class="row-control">
+                <select id="sttLanguage">
+                  <option value="de">Deutsch</option>
+                  <option value="en">English</option>
+                  <option value="fr">Français</option>
+                  <option value="es">Español</option>
+                  <option value="it">Italiano</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label" data-i18n="voice.model">Whisper-Modell</span>
+                <span class="row-desc" data-i18n="voice.model_desc"></span>
+              </div>
+              <div class="row-control">
+                <select id="whisperModel">
+                  <option value="tiny" data-i18n="voice.model_tiny"></option>
+                  <option value="base" data-i18n="voice.model_base"></option>
+                  <option value="small" data-i18n="voice.model_small"></option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="row-text"><span class="row-label" data-i18n="voice.device">Mikrofon</span></div>
+              <div class="row-control"><select id="inputDevice" style="max-width: 260px"></select></div>
+            </div>
+
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label" data-i18n="voice.threshold">Trefferschwelle</span>
+                <span class="row-desc" data-i18n="voice.threshold_desc"></span>
+              </div>
+              <div class="row-control">
+                <input type="range" id="threshold" min="0.5" max="0.95" step="0.01" />
+                <code id="thresholdValue" style="width: 34px"></code>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="row-text"><span class="row-label" data-i18n="voice.timeout">Maximale Befehlslänge</span></div>
+              <div class="row-control">
+                <input type="number" id="commandTimeout" min="2" max="20" step="0.5" style="width: 76px" />
+                <span class="row-desc" data-i18n="unit.s">s</span>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="row-text"><span class="row-label" data-i18n="voice.cooldown">Sperrzeit</span></div>
+              <div class="row-control">
+                <input type="number" id="cooldown" min="0" max="10" step="0.5" style="width: 76px" />
+                <span class="row-desc" data-i18n="unit.s">s</span>
+              </div>
+            </div>
           </div>
-          <div class="credits">
-            Made by
-            <a href="https://vensin.dev" target="_blank" class="author-link"
-              >Vensin</a
-            >
+
+          <div class="card">
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label" data-i18n="voice.ptt">Push-to-Talk</span>
+                <span class="row-desc" data-i18n="voice.ptt_desc"></span>
+              </div>
+              <div class="row-control">
+                <label class="switch"><input type="checkbox" id="pttToggle" /><span></span></label>
+              </div>
+            </div>
+
+            <div class="row" id="pttHotkeyRow">
+              <div class="row-text"><span class="row-label" data-i18n="voice.ptt_hotkey">Taste</span></div>
+              <div class="row-control">
+                <input type="text" class="hotkey-input" id="pttHotkey" readonly style="width: 190px" />
+              </div>
+            </div>
           </div>
-        </div>
-      </footer>
+
+          <div class="card">
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label" data-i18n="voice.overlay">Bildschirmanzeige</span>
+                <span class="row-desc" data-i18n="voice.overlay_desc"></span>
+              </div>
+              <div class="row-control">
+                <label class="switch"><input type="checkbox" id="overlayToggle" /><span></span></label>
+              </div>
+            </div>
+
+            <div class="row" id="overlayPositionRow">
+              <div class="row-text">
+                <span class="row-label" data-i18n="voice.overlay_position">Position</span>
+                <span class="row-desc" id="overlayCustomNote" hidden data-i18n="voice.overlay_custom_note"></span>
+              </div>
+              <div class="row-control">
+                <select id="overlayPosition">
+                  <option value="top-left" data-i18n="pos.top-left"></option>
+                  <option value="top-center" data-i18n="pos.top-center"></option>
+                  <option value="top-right" data-i18n="pos.top-right"></option>
+                  <option value="bottom-left" data-i18n="pos.bottom-left"></option>
+                  <option value="bottom-center" data-i18n="pos.bottom-center"></option>
+                  <option value="bottom-right" data-i18n="pos.bottom-right"></option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row" id="overlayScaleRow">
+              <div class="row-text">
+                <span class="row-label" data-i18n="voice.overlay_scale">Größe</span>
+                <span class="row-desc" data-i18n="voice.overlay_scale_desc"></span>
+              </div>
+              <div class="row-control">
+                <input type="range" id="overlayScale" min="0.7" max="2" step="0.05" />
+                <code id="overlayScaleValue" style="width: 42px"></code>
+              </div>
+            </div>
+
+            <div class="row" id="overlayPlaceRow">
+              <div class="row-text">
+                <span class="row-label" data-i18n="voice.overlay_place">Frei positionieren</span>
+                <span class="row-desc" data-i18n="voice.overlay_place_desc"></span>
+              </div>
+              <div class="row-control">
+                <button class="btn" id="overlayPreviewBtn" data-i18n="voice.overlay_preview">Vorschau</button>
+                <button class="btn primary" id="overlayPlaceBtn" data-i18n="voice.overlay_place_start">Platzieren</button>
+                <button class="btn" id="overlayResetBtn" data-i18n="voice.overlay_reset">Zurücksetzen</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- --------------------------------------------------------- music -->
+        <section class="page" id="page-music">
+          <div class="page-head">
+            <h1 data-i18n="music.title">Musik</h1>
+            <p data-i18n="music.subtitle"></p>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2 data-i18n="music.media_title">Medientasten</h2>
+              <span class="badge badge-secondary" data-i18n="music.no_account">Ohne Konto</span>
+            </div>
+            <p class="row-desc" style="padding: 10px 0 2px" data-i18n="music.media_desc"></p>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2>Spotify</h2>
+              <span class="badge" id="spotifyBadge" data-i18n="music.not_connected">Nicht verbunden</span>
+            </div>
+
+            <div class="banner warn">
+              <span class="grow" data-i18n="music.premium_note"></span>
+            </div>
+
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label" data-i18n="music.client_id">Client-ID</span>
+                <span class="row-desc" data-i18n="music.client_id_desc"></span>
+              </div>
+              <div class="row-control">
+                <input type="text" id="spotifyClientId" spellcheck="false" style="width: 280px; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px" />
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label" data-i18n="music.redirect">Redirect-URI</span>
+                <span class="row-desc" data-i18n="music.redirect_desc"></span>
+              </div>
+              <div class="row-control">
+                <code id="spotifyRedirect">http://127.0.0.1:8888/callback</code>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label" data-i18n="music.connection">Verbindung</span>
+                <span class="row-desc" id="spotifyStatusText"></span>
+              </div>
+              <div class="row-control">
+                <button class="btn" id="spotifyDashboardBtn" data-i18n="music.open_dashboard">Dashboard</button>
+                <button class="btn primary" id="spotifyConnectBtn" data-i18n="music.connect">Verbinden</button>
+                <button class="btn danger" id="spotifyDisconnectBtn" hidden data-i18n="music.disconnect">Trennen</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2 data-i18n="music.examples">Beispiele</h2></div>
+            <div class="kv"><code>spiel {}</code><span data-i18n="music.example_play"></span></div>
+            <div class="kv"><code>musik pause</code><span data-i18n="music.example_pause"></span></div>
+            <div class="kv"><code>naechster song</code><span data-i18n="music.example_next"></span></div>
+          </div>
+        </section>
+
+        <!-- --------------------------------------------------------- about -->
+        <section class="page" id="page-about">
+          <div class="page-head">
+            <h1 data-i18n="about.title">Über Okay-Garmin</h1>
+            <p data-i18n="about.subtitle"></p>
+          </div>
+
+          <div class="card">
+            <div class="banner" id="updateBanner" hidden>
+              <span class="grow" id="updateText"></span>
+              <button class="btn primary" id="updateBtn" data-i18n="about.update_now">Jetzt aktualisieren</button>
+            </div>
+
+            <div class="kv"><span data-i18n="about.version">Installierte Version</span><code id="aboutVersion">–</code></div>
+            <div class="kv"><span data-i18n="about.latest">Neueste Version</span><code id="aboutLatest">–</code></div>
+            <div class="kv"><span data-i18n="about.config_path">Einstellungen</span><code id="aboutConfig">–</code></div>
+            <div class="kv"><span data-i18n="about.log_path">Protokolle</span><code id="aboutLogs">–</code></div>
+
+            <div class="row" style="padding-top: 16px">
+              <div class="row-text"><span class="row-desc" data-i18n="about.author">Ein Projekt von Vensin</span></div>
+              <div class="row-control">
+                <button class="btn" id="openLogsBtn" data-i18n="about.open">Öffnen</button>
+                <button class="btn" id="checkUpdateBtn" data-i18n="about.check">Nach Updates suchen</button>
+                <button class="btn" id="repoBtn">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                  <span data-i18n="about.repo">GitHub</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
-<script src="script.js"></script>
+
+    <div class="toasts" id="toasts"></div>
+
+    <script src="js/i18n.js"></script>
+    <script src="js/hotkey.js"></script>
+    <script src="js/app.js"></script>
   </body>
 </html>
