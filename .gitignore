@@ -220,3 +220,4 @@ __marimo__/
 web/_preview.html
 # Local speech models, if anyone points the cache here.
 models/
+_hudpreview.html
