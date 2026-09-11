@@ -47,8 +47,14 @@ SCOPES = " ".join(
         "user-read-playback-state",
         "user-modify-playback-state",
         "user-read-currently-playing",
+        # Needed for "add to my liked songs".
+        "user-library-read",
+        "user-library-modify",
     ]
 )
+
+# Values the "repeat" endpoint accepts, in the order the cycle walks them.
+REPEAT_MODES = ("off", "context", "track")
 
 # What "spiel {}" should look for, in order of preference.
 SEARCH_TYPES = ("track", "album", "playlist", "artist")
@@ -299,6 +305,7 @@ class SpotifyClient:
 
         return {
             "uri": item.get("uri"),
+            "id": item.get("id"),
             "kind": kind,
             "title": item.get("name", ""),
             "subtitle": subtitle,
@@ -325,7 +332,7 @@ class SpotifyClient:
         return match
 
     def control(self, action: str) -> None:
-        """pause / resume / next / previous / shuffle."""
+        """pause / resume / next / previous."""
         endpoints = {
             "pause": ("PUT", "/me/player/pause"),
             "resume": ("PUT", "/me/player/play"),
@@ -336,9 +343,127 @@ class SpotifyClient:
             raise SpotifyError(f"unknown-action: {action}")
 
         method, path = endpoints[action]
-        response = self._request(method, path)
+        self._expect_ok(self._request(method, path), action)
+
+    @staticmethod
+    def _expect_ok(response, what: str):
         if response.status_code not in (200, 202, 204):
-            raise SpotifyError(f"{action}-failed: {response.status_code}")
+            raise SpotifyError(f"{what}-failed: {response.status_code}")
+        return response
+
+    # ------------------------------------------------------------------ state
+
+    def playback_state(self) -> dict | None:
+        """The full player state: shuffle, repeat, volume and the current item."""
+        response = self._request("GET", "/me/player")
+        if response.status_code == 204 or not response.content:
+            return None
+        if response.status_code != 200:
+            raise SpotifyError(f"state-failed: {response.status_code}")
+        return response.json() or None
+
+    # ------------------------------------------------------------------ shuffle
+
+    def set_shuffle(self, enabled: bool) -> bool:
+        self._expect_ok(
+            self._request(
+                "PUT", "/me/player/shuffle", params={"state": str(bool(enabled)).lower()}
+            ),
+            "shuffle",
+        )
+        log.info("Spotify shuffle %s", "on" if enabled else "off")
+        return enabled
+
+    def toggle_shuffle(self) -> bool:
+        state = self.playback_state()
+        if state is None:
+            raise SpotifyError("no-active-device")
+        return self.set_shuffle(not state.get("shuffle_state", False))
+
+    # ------------------------------------------------------------------ repeat
+
+    def set_repeat(self, mode: str) -> str:
+        if mode not in REPEAT_MODES:
+            raise SpotifyError(f"unknown-repeat-mode: {mode}")
+        self._expect_ok(
+            self._request("PUT", "/me/player/repeat", params={"state": mode}), "repeat"
+        )
+        log.info("Spotify repeat %s", mode)
+        return mode
+
+    def cycle_repeat(self) -> str:
+        """off -> whole playlist -> single track -> off."""
+        state = self.playback_state()
+        if state is None:
+            raise SpotifyError("no-active-device")
+        current = state.get("repeat_state", "off")
+        index = REPEAT_MODES.index(current) if current in REPEAT_MODES else 0
+        return self.set_repeat(REPEAT_MODES[(index + 1) % len(REPEAT_MODES)])
+
+    # ------------------------------------------------------------------ library
+
+    def is_saved(self, track_id: str) -> bool:
+        response = self._request("GET", "/me/tracks/contains", params={"ids": track_id})
+        if response.status_code != 200:
+            raise SpotifyError(f"contains-failed: {response.status_code}")
+        result = response.json()
+        return bool(result and result[0])
+
+    def set_saved(self, save: bool) -> dict:
+        """Add the current track to your liked songs, or remove it."""
+        track = self.now_playing()
+        if not track or not track.get("id"):
+            raise SpotifyError("nothing-playing")
+
+        method = "PUT" if save else "DELETE"
+        self._expect_ok(
+            self._request(method, "/me/tracks", params={"ids": track["id"]}),
+            "like" if save else "unlike",
+        )
+        log.info("Spotify %s %r", "liked" if save else "unliked", track["title"])
+        return track
+
+    def toggle_saved(self) -> tuple[dict, bool]:
+        track = self.now_playing()
+        if not track or not track.get("id"):
+            raise SpotifyError("nothing-playing")
+        saved = self.is_saved(track["id"])
+        self.set_saved(not saved)
+        return track, not saved
+
+    # ------------------------------------------------------------------ queue
+
+    def enqueue(self, query: str) -> dict:
+        """Find a track and put it next in the queue rather than playing it now."""
+        match = self.search(query, types=("track",))
+        if match is None:
+            raise SpotifyError("nothing-found")
+        self._expect_ok(
+            self._request("POST", "/me/player/queue", params={"uri": match["uri"]}),
+            "queue",
+        )
+        log.info("Spotify queued %r", match["title"])
+        return match
+
+    # ------------------------------------------------------------------ volume
+
+    def nudge_volume(self, delta: int) -> int:
+        """Change Spotify's own volume, which is separate from the system one."""
+        state = self.playback_state()
+        if state is None:
+            raise SpotifyError("no-active-device")
+
+        device = state.get("device") or {}
+        current = device.get("volume_percent")
+        if current is None:
+            raise SpotifyError("volume-not-supported")
+
+        target = max(0, min(100, int(current) + delta))
+        self._expect_ok(
+            self._request("PUT", "/me/player/volume", params={"volume_percent": target}),
+            "volume",
+        )
+        return target
 
     def now_playing(self) -> dict | None:
         """What is playing right now, shaped like a search result."""

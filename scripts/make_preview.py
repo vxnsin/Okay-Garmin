@@ -25,6 +25,15 @@ def build_config() -> dict:
     config["spotify"]["client_id"] = "3f9a1c2b4d5e6f7a8b9c0d1e2f3a4b5c"
     config["voice_commands"] += [
         {
+            # Deliberately missing its {} -- shows the editor warning.
+            "command": "spiel was schoenes",
+            "aliases": [],
+            "type": "spotify",
+            "value": "play",
+            "delay": 0,
+            "enabled": True,
+        },
+        {
             "command": "musik pause",
             "aliases": ["pause musik", "stopp die musik"],
             "type": "hotkey",

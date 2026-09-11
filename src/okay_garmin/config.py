@@ -47,6 +47,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         # there is no secret to store.
         "client_id": "",
     },
+    # A command needs no Spotify connection unless its type says "spotify".
+    # The media ones work with any player straight after installation.
     "voice_commands": [
         {
             "command": "video speichern",
@@ -62,6 +64,70 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "aliases": ["spiele {}", "mach {} an"],
             "type": "spotify",
             "value": "play",
+            "delay": 0,
+            "enabled": True,
+        },
+        {
+            "command": "stell {} in die warteschlange",
+            "aliases": ["{} in die warteschlange"],
+            "type": "spotify",
+            "value": "queue",
+            "delay": 0,
+            "enabled": True,
+        },
+        {
+            "command": "wie heisst der song",
+            "aliases": [
+                "was laeuft gerade",
+                "was fuer ein song ist das",
+                "welcher song ist das",
+            ],
+            "type": "spotify",
+            "value": "current",
+            "delay": 0,
+            "enabled": True,
+        },
+        {
+            "command": "song merken",
+            "aliases": [
+                "zu lieblingssongs hinzufuegen",
+                "song liken",
+                "das gefaellt mir",
+            ],
+            "type": "spotify",
+            "value": "like",
+            "delay": 0,
+            "enabled": True,
+        },
+        {
+            "command": "shuffle an",
+            "aliases": ["zufallswiedergabe an"],
+            "type": "spotify",
+            "value": "shuffle_on",
+            "delay": 0,
+            "enabled": True,
+        },
+        {
+            "command": "shuffle aus",
+            "aliases": ["zufallswiedergabe aus"],
+            "type": "spotify",
+            "value": "shuffle_off",
+            "delay": 0,
+            "enabled": True,
+        },
+        {
+            "command": "wiederholen an",
+            "aliases": ["wiederholung an"],
+            "type": "spotify",
+            "value": "repeat_all",
+            "delay": 0,
+            "enabled": True,
+        },
+        {
+            "command": "wiederholen aus",
+            "aliases": ["wiederholung aus"],
+            "type": "spotify",
+            "value": "repeat_off",
             "delay": 0,
             "enabled": True,
         },

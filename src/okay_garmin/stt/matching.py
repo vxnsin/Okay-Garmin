@@ -73,8 +73,11 @@ def similarity(a: str, b: str) -> float:
 def phrase_score(text: str, phrase: str) -> float:
     """Best similarity of `phrase` against any same-length window of `text`.
 
-    Windows of n-1 and n+1 words are also tried, so a dropped or inserted
-    filler word doesn't sink an otherwise clean match.
+    A window of n+1 words is also tried so an inserted filler word doesn't sink
+    an otherwise clean match, and n-1 for the same reason -- but only from three
+    words up. On a two-word command the shorter window is a single word, which
+    is far too permissive: "wiederholen" alone would then satisfy "wiederholen
+    an", and any sentence containing the verb would fire the command.
     """
     text = normalize(text)
     phrase = normalize(phrase)
@@ -85,9 +88,13 @@ def phrase_score(text: str, phrase: str) -> float:
 
     words = text.split()
     n = len(phrase.split())
-    best = similarity(text, phrase)
 
-    for width in {max(1, n - 1), n, n + 1}:
+    widths = {n, n + 1}
+    if n >= 3:
+        widths.add(n - 1)
+
+    best = similarity(text, phrase)
+    for width in widths:
         for i in range(len(words) - width + 1):
             window = " ".join(words[i : i + width])
             best = max(best, similarity(window, phrase))

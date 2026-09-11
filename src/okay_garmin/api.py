@@ -17,6 +17,7 @@ from .logging_setup import get_logger
 from .paths import app_dir, is_frozen, log_dir, web_dir
 from .spotify import SpotifyError
 from .stt.audio import list_input_devices
+from .stt.matching import SLOT
 from .updater.core import check_for_update
 from .version import GITHUB_URL, WAKE_WORD, __version__
 
@@ -154,7 +155,14 @@ class Api:
         commands = config_module.get("voice_commands", [])
         if not 0 <= index < len(commands):
             return {"status": "error", "reason": "out-of-range"}
-        self._app.engine.run_command(commands[index])
+
+        command = commands[index]
+        # A {} command carries a song or playlist name that only speech can
+        # supply. Running it here would do nothing and report success.
+        if SLOT in (command.get("command") or ""):
+            return {"status": "needs-speech"}
+
+        self._app.engine.run_command(command)
         return {"status": "ok"}
 
     # ------------------------------------------------------------------ models

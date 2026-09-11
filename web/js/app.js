@@ -196,6 +196,12 @@ function buildCommandRow(cmd, index) {
   phrase.value = cmd.command || "";
   phrase.placeholder = I18n.t("commands.phrase_ph");
   phrase.title = I18n.t("commands.slot_hint");
+  // "spiel" with no {} can never carry a song name -- say so rather than
+  // letting it fail silently at runtime.
+  if (cmd.type === "spotify" && SLOT_ACTIONS.has(cmd.value) && !(cmd.command || "").includes("{}")) {
+    phrase.classList.add("warn");
+    phrase.title = I18n.t("commands.slot_required");
+  }
   phrase.addEventListener("input", () => {
     config.voice_commands[index].command = phrase.value;
     save();
@@ -260,8 +266,9 @@ function buildCommandRow(cmd, index) {
   test.title = I18n.t("commands.test");
   test.innerHTML = ICONS.play;
   test.addEventListener("click", async () => {
-    await window.pywebview.api.test_command(index);
-    toast(I18n.t("toast.test_started"), "good");
+    const result = await window.pywebview.api.test_command(index);
+    if (result.status === "needs-speech") toast(I18n.t("toast.test_needs_speech"));
+    else toast(I18n.t("toast.test_started"), "good");
   });
   actions.appendChild(test);
 
@@ -308,8 +315,31 @@ const DEFAULT_VALUE = {
 
 const CHOICES = {
   media: ["play_pause", "next", "previous", "volume_up", "volume_down", "mute"],
-  spotify: ["play", "pause", "resume", "next", "previous", "current"],
+  spotify: [
+    "play",
+    "queue",
+    "pause",
+    "resume",
+    "next",
+    "previous",
+    "current",
+    "shuffle_on",
+    "shuffle_off",
+    "shuffle_toggle",
+    "repeat_all",
+    "repeat_track",
+    "repeat_off",
+    "repeat_cycle",
+    "like",
+    "unlike",
+    "like_toggle",
+    "volume_up",
+    "volume_down",
+  ],
 };
+
+// Only these two read the {} slot; the rest act on whatever is already playing.
+const SLOT_ACTIONS = new Set(["play", "queue"]);
 
 function buildChoiceControl(cmd, index) {
   const select = document.createElement("select");
