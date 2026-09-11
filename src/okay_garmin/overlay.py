@@ -392,6 +392,19 @@ class Overlay:
         labels["now_playing"] = strings.get("hud.now_playing", "now playing").upper()
         labels["placement"] = strings.get("hud.placement", "Drag me into place")
         labels["placement_done"] = strings.get("hud.placement_done", "Done")
+
+        # Captions for Spotify results and failures, keyed the way the engine
+        # reports them.
+        labels["notes"] = {
+            key[len("hud.note.") :]: value.upper()
+            for key, value in strings.items()
+            if key.startswith("hud.note.")
+        }
+        labels["errors"] = {
+            key[len("hud.err.") :]: value
+            for key, value in strings.items()
+            if key.startswith("hud.err.")
+        }
         self._push({"type": "labels", "labels": labels})
 
     def _push(self, event: dict[str, Any]) -> None:

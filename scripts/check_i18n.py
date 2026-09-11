@@ -25,6 +25,7 @@ DYNAMIC_PREFIXES = (
     "pos.",
     "media.",
     "spotify.",
+    "hud.",
 )
 
 

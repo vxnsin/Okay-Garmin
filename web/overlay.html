@@ -201,9 +201,15 @@
         art.style.boxShadow = "0 0 0 " + (level * 9).toFixed(1) + "px rgba(139, 92, 246, 0.16)";
       }, 70);
 
-      function clearCover() {
+      // Artwork only: swapping back to the waveform must not throw away the
+      // artist line, which a track without a cover still has.
+      function resetArt() {
         cover.classList.remove("on");
         wave.classList.remove("off");
+      }
+
+      function clearCover() {
+        resetArt();
         subtitle.classList.remove("on");
         subtitle.textContent = "";
         hud.classList.remove("playing");
@@ -212,14 +218,20 @@
       function showCover(event) {
         hud.classList.remove("matched", "nomatch");
         hud.classList.add("playing", "show");
-        label.textContent = LABELS.now_playing;
+        // The note says what actually happened -- shuffle, a like, a queue add
+        // -- so the caption is not always "now playing".
+        const notes = LABELS.notes || {};
+        label.textContent = notes[event.note] || LABELS.now_playing;
         title.textContent = event.title || "";
         title.classList.remove("dim");
-        subtitle.textContent = event.subtitle || "";
+        subtitle.textContent =
+          event.volume !== undefined && event.note === "volume"
+            ? event.volume + "%"
+            : event.subtitle || "";
         subtitle.classList.add("on");
 
         if (!event.image) {
-          clearCover();
+          resetArt();
           return;
         }
         // Only swap the artwork once it has actually decoded, otherwise the
@@ -333,13 +345,19 @@
             showCover(event);
             break;
 
-          case "spotify_error":
+          case "spotify_error": {
             hud.classList.remove("playing", "matched");
             hud.classList.add("nomatch", "show");
             label.textContent = "SPOTIFY";
-            title.textContent = event.error || "";
+            // Error codes arrive as "premium-required"; look up a readable
+            // sentence and fall back to the raw code.
+            const errors = LABELS.errors || {};
+            const key = String(event.error || "").split(":")[0].replace(/-/g, "_");
+            title.textContent = errors[key] || event.error || "";
             title.classList.remove("dim");
+            clearCover();
             break;
+          }
         }
       };
     </script>

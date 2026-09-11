@@ -392,33 +392,93 @@ class VoiceEngine:
 
         threading.Thread(target=worker, name="command-exec", daemon=True).start()
 
+    # Actions that take the free text of a {} slot.
+    SPOTIFY_NEEDS_ARGUMENT = {"play", "queue"}
+
+    # Actions that change the track, so the HUD should show the new one.
+    SPOTIFY_CHANGES_TRACK = {"next", "previous", "resume"}
+
     def _run_spotify(self, command: dict, argument: str) -> bool:
-        """Run a Spotify command and push what is now playing to the HUD."""
+        """Run a Spotify command and push the result to the HUD.
+
+        Every branch produces an optional track plus a `note` naming what
+        happened, so the HUD can caption "shuffle on" rather than always
+        claiming something started playing.
+        """
         action = (command.get("value") or "play").strip()
 
         delay = float(command.get("delay") or 0)
         if delay > 0:
             time.sleep(delay)
 
+        if action in self.SPOTIFY_NEEDS_ARGUMENT and not argument:
+            log.info("Spotify %r command had nothing to search for", action)
+            self.emit({"type": "spotify_error", "error": "nothing-said"})
+            return False
+
         try:
-            if action == "play":
-                if not argument:
-                    log.info("Spotify play command had nothing to search for")
-                    self.emit({"type": "spotify_error", "error": "nothing-said"})
-                    return False
-                track = self.spotify.play(argument)
-            elif action == "current":
-                track = self.spotify.now_playing()
-            else:
-                self.spotify.control(action)
-                # Give Spotify a moment to switch tracks before asking what plays.
-                time.sleep(0.6)
-                track = self.spotify.now_playing()
+            track, note = self._spotify_action(action, argument)
         except SpotifyError as exc:
             log.warning("Spotify: %s", exc)
             self.emit({"type": "spotify_error", "error": str(exc)})
             return False
 
-        if track:
-            self.emit({"type": "now_playing", **track})
+        if track or note:
+            self.emit({"type": "now_playing", "note": note, **(track or {})})
         return True
+
+    def _spotify_action(self, action: str, argument: str):
+        """Returns (track, note). Either may be None."""
+        spotify = self.spotify
+
+        if action == "play":
+            return spotify.play(argument), "playing"
+        if action == "queue":
+            return spotify.enqueue(argument), "queued"
+        if action == "current":
+            return spotify.now_playing(), "current"
+
+        if action == "shuffle_on":
+            spotify.set_shuffle(True)
+            return spotify.now_playing(), "shuffle_on"
+        if action == "shuffle_off":
+            spotify.set_shuffle(False)
+            return spotify.now_playing(), "shuffle_off"
+        if action == "shuffle_toggle":
+            enabled = spotify.toggle_shuffle()
+            return spotify.now_playing(), "shuffle_on" if enabled else "shuffle_off"
+
+        if action == "repeat_track":
+            spotify.set_repeat("track")
+            return spotify.now_playing(), "repeat_track"
+        if action == "repeat_all":
+            spotify.set_repeat("context")
+            return spotify.now_playing(), "repeat_all"
+        if action == "repeat_off":
+            spotify.set_repeat("off")
+            return spotify.now_playing(), "repeat_off"
+        if action == "repeat_cycle":
+            mode = spotify.cycle_repeat()
+            note = {"off": "repeat_off", "context": "repeat_all", "track": "repeat_track"}[mode]
+            return spotify.now_playing(), note
+
+        if action == "like":
+            return spotify.set_saved(True), "liked"
+        if action == "unlike":
+            return spotify.set_saved(False), "unliked"
+        if action == "like_toggle":
+            track, saved = spotify.toggle_saved()
+            return track, "liked" if saved else "unliked"
+
+        if action in ("volume_up", "volume_down"):
+            volume = spotify.nudge_volume(10 if action == "volume_up" else -10)
+            track = spotify.now_playing() or {}
+            return {**track, "volume": volume}, "volume"
+
+        # pause / resume / next / previous
+        spotify.control(action)
+        if action in self.SPOTIFY_CHANGES_TRACK:
+            # Give Spotify a moment to switch before asking what is playing.
+            time.sleep(0.6)
+            return spotify.now_playing(), "playing"
+        return None, action

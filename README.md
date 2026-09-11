@@ -3,7 +3,7 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/wordmark-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="assets/wordmark-light.svg">
-  <img src="assets/wordmark-dark.svg" alt="Okay-Garmin" width="420">
+  <img src="assets/wordmark-dark.svg" alt="Okay-Garmin" width="380">
 </picture>
 
 **Say _“Okay Garmin”_, then tell your PC what to do.**
@@ -61,17 +61,41 @@ Open the settings from the tray icon.
 |---|---|
 | Hotkey | Presses a key combination (`f8`, `ctrl+shift+s`, `mediaplay`, …) |
 | Media key | Play/pause, next, previous, volume, mute — works with any player |
-| Spotify | Play something by name, pause, skip, or ask what is playing |
+| Spotify | 19 actions: play by name, queue, shuffle, repeat, like, volume, what's playing |
 | File / Folder / Program | Opens it |
 
 Write `{}` in a phrase to leave a gap for free text:
 
 ```
-spiel {}          →  "spiel Tocotronic"  puts on Tocotronic
-mach {} an        →  "mach Deep Focus an"  starts that playlist
+spiel {}                        →  "spiel Tocotronic"  puts on Tocotronic
+mach {} an                      →  "mach Deep Focus an"  starts that playlist
+stell {} in die warteschlange   →  "stell Africa von Toto in die warteschlange"
 ```
 
 **The wake word is fixed at “Okay Garmin”** — that is the point of the project.
+
+### What ships preconfigured
+
+These exist after installation. The media ones work immediately; the Spotify ones
+need a connection (below).
+
+| Say | What happens |
+|---|---|
+| „spiel {}“ · „spiele {}“ · „mach {} an“ | Plays that song, album, artist or playlist |
+| „stell {} in die warteschlange“ | Queues a track instead of interrupting |
+| „wie heißt der song“ · „was läuft gerade“ · „was für ein song ist das“ | Shows title, artist and cover |
+| „song merken“ · „zu lieblingssongs hinzufügen“ · „das gefällt mir“ | Adds the current track to your liked songs |
+| „shuffle an“ · „shuffle aus“ · „zufallswiedergabe an/aus“ | Shuffle |
+| „wiederholen an“ · „wiederholen aus“ | Repeat the playlist, or stop repeating |
+| „musik pause“ · „stopp die musik“ | Play/pause, any player |
+| „nächster song“ · „skip“ · „letzter song“ | Skip, any player |
+| „video speichern“ | Presses F8 |
+
+Not enabled by default, but available in the dropdown: toggle shuffle, repeat a
+single track, cycle repeat, remove from liked songs, and Spotify's own volume up
+and down (separate from the system volume).
+
+Edit, rename or delete any of them — they are only a starting point.
 
 ### Spotify
 
@@ -81,9 +105,13 @@ Media-key commands need nothing at all. Playing a *specific* song by name needs 
 2. Add `http://127.0.0.1:8888/callback` as a redirect URI.
 3. Paste the client ID into **Music → Client ID** and press **Connect**.
 
-Authorisation uses PKCE, so there is no client secret to store. Tokens live in `%APPDATA%\Okay-Garmin\spotify.json`.
+Authorisation uses PKCE, so there is no client secret to store. Tokens live in `%APPDATA%\Okay-Garmin\spotify.json`, separate from `config.json` so the settings file stays safe to attach to a bug report.
 
 > Starting playback is a **Spotify Premium** feature, and Spotify has to be running on some device. Without Premium, use the media-key commands.
+
+Scopes requested: playback state, playback control, currently playing, and your
+library (liking a song needs it). If you connected before v2.1 you have to press
+**Connect** once more — the older grant has no library access.
 
 ## How it works
 
@@ -153,6 +181,7 @@ Releases are built by [`.github/workflows/release.yml`](.github/workflows/releas
 - [x] Push-to-talk
 - [x] On-screen display
 - [x] Spotify + media keys
+- [x] Spotify: shuffle, repeat, liked songs, queue, now playing
 - [ ] More command types: type text, open URL
 - [ ] Command history and undo
 - [ ] More interface languages
