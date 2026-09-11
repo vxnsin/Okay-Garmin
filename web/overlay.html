@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Okay-Garmin HUD</title>
+    <style>
+      /* Self-contained: the HUD must not depend on the settings stylesheet. */
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      /* The window is opaque -- WebView2 ignores pywebview's transparency --
+         so the card colour lives on <body> and Win32 rounds the window itself. */
+      html, body {
+        height: 100%;
+        background: #101016;
+        overflow: hidden;
+        font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+        user-select: none;
+        cursor: default;
+      }
+
+      body.placing { cursor: grab; }
+      body.placing.dragging { cursor: grabbing; }
+
+      .hud {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 14px 18px;
+        color: #f4f4f6;
+        opacity: 0;
+        transform: translateX(-6px);
+        transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+      }
+
+      .hud.show { opacity: 1; transform: none; }
+
+      /* Squircle, not a circle: album art is square, so a rounded square keeps
+         the cover and the idle waveform in the same silhouette. */
+      .art {
+        position: relative;
+        width: 66px;
+        height: 66px;
+        flex: none;
+        border-radius: 22%;
+        overflow: hidden;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.45);
+        transition: box-shadow 0.12s linear;
+      }
+
+      .art img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        opacity: 0;
+        transition: opacity 0.32s ease-out;
+      }
+
+      .art img.on { opacity: 1; }
+
+      .wave {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        height: 28px;
+        transition: opacity 0.25s ease-out;
+      }
+
+      .wave.off { opacity: 0; }
+
+      .wave i {
+        width: 3px;
+        height: 6px;
+        border-radius: 2px;
+        background: rgba(255, 255, 255, 0.95);
+        transition: height 0.09s ease-out;
+      }
+
+      .body { flex: 1; min-width: 0; }
+
+      .label {
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: #a5a9f5;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .title {
+        font-size: 15.5px;
+        font-weight: 600;
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-height: 22px;
+      }
+
+      .title.dim { color: #8f93a3; font-weight: 400; }
+
+      .subtitle {
+        font-size: 12.5px;
+        color: #8f93a3;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        height: 0;
+        opacity: 0;
+        transition: height 0.2s ease-out, opacity 0.2s ease-out;
+      }
+
+      .subtitle.on { height: 18px; opacity: 1; }
+
+      .hud.matched .art { box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.4); }
+      .hud.matched .label { color: #34d399; }
+      .hud.nomatch .label { color: #f87171; }
+      .hud.playing .label { color: #1ed760; }
+
+      /* Placement mode */
+      .done {
+        display: none;
+        flex: none;
+        font: inherit;
+        font-size: 12.5px;
+        font-weight: 600;
+        padding: 7px 14px;
+        border-radius: 9px;
+        border: 0;
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        color: #fff;
+        cursor: pointer;
+      }
+
+      body.placing .done { display: block; }
+      body.placing .hud { opacity: 1; transform: none; }
+
+      @media (prefers-reduced-motion: reduce) {
+        .hud, .wave i, .art, .art img, .subtitle { transition: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="hud" id="hud">
+      <div class="art" id="art">
+        <div class="wave" id="wave"></div>
+        <img id="cover" alt="" />
+      </div>
+      <div class="body">
+        <div class="label" id="label">Okay-Garmin</div>
+        <div class="title dim" id="title">…</div>
+        <div class="subtitle" id="subtitle"></div>
+      </div>
+      <button class="done" id="done">Fertig</button>
+    </div>
+
+    <script>
+      const BARS = 5;
+
+      // Replaced with the user's interface language by a "labels" event as soon
+      // as the window loads; these are only the pre-load fallback.
+      let LABELS = {
+        armed: "HÖRT ZU",
+        recording: "NIMMT AUF",
+        transcribing: "ERKENNT",
+        executing: "FÜHRT AUS",
+        listening: "BEREIT",
+        no_match: "KEIN TREFFER",
+        now_playing: "LÄUFT JETZT",
+        placement: "Zieh mich an die richtige Stelle",
+        placement_done: "Fertig",
+      };
+
+      const hud = document.getElementById("hud");
+      const wave = document.getElementById("wave");
+      const art = document.getElementById("art");
+      const cover = document.getElementById("cover");
+      const label = document.getElementById("label");
+      const title = document.getElementById("title");
+      const subtitle = document.getElementById("subtitle");
+      const doneBtn = document.getElementById("done");
+
+      for (let i = 0; i < BARS; i++) wave.appendChild(document.createElement("i"));
+      const bars = wave.children;
+
+      // Idle shimmer so the HUD does not look frozen while waiting for speech.
+      let level = 0;
+      setInterval(() => {
+        for (let i = 0; i < BARS; i++) {
+          const centre = 1 - Math.abs(i - (BARS - 1) / 2) / BARS;
+          const jitter = 0.45 + Math.random() * 0.55;
+          bars[i].style.height = (5 + level * 22 * centre * jitter).toFixed(1) + "px";
+        }
+        art.style.boxShadow = "0 0 0 " + (level * 9).toFixed(1) + "px rgba(139, 92, 246, 0.16)";
+      }, 70);
+
+      function clearCover() {
+        cover.classList.remove("on");
+        wave.classList.remove("off");
+        subtitle.classList.remove("on");
+        subtitle.textContent = "";
+        hud.classList.remove("playing");
+      }
+
+      function showCover(event) {
+        hud.classList.remove("matched", "nomatch");
+        hud.classList.add("playing", "show");
+        label.textContent = LABELS.now_playing;
+        title.textContent = event.title || "";
+        title.classList.remove("dim");
+        subtitle.textContent = event.subtitle || "";
+        subtitle.classList.add("on");
+
+        if (!event.image) {
+          clearCover();
+          return;
+        }
+        // Only swap the artwork once it has actually decoded, otherwise the
+        // square flashes empty between the gradient and the cover.
+        const img = new Image();
+        img.onload = function () {
+          cover.src = event.image;
+          cover.classList.add("on");
+          wave.classList.add("off");
+        };
+        img.src = event.image;
+      }
+
+      /* ------------------------------------------------------- placement mode */
+
+      let dragging = false;
+      let lastX = 0;
+      let lastY = 0;
+
+      document.addEventListener("mousedown", function (e) {
+        if (!document.body.classList.contains("placing") || e.target === doneBtn) return;
+        dragging = true;
+        lastX = e.screenX;
+        lastY = e.screenY;
+        document.body.classList.add("dragging");
+        e.preventDefault();
+      });
+
+      document.addEventListener("mousemove", function (e) {
+        if (!dragging) return;
+        const dx = e.screenX - lastX;
+        const dy = e.screenY - lastY;
+        if (dx === 0 && dy === 0) return;
+        lastX = e.screenX;
+        lastY = e.screenY;
+        // Python owns the window position; screen deltas survive the move.
+        window.pywebview.api.drag(dx, dy);
+      });
+
+      document.addEventListener("mouseup", function () {
+        dragging = false;
+        document.body.classList.remove("dragging");
+      });
+
+      doneBtn.addEventListener("click", function () {
+        window.pywebview.api.placement_done();
+      });
+
+      /* --------------------------------------------------------------- events */
+
+      window.hudEvent = function (event) {
+        switch (event.type) {
+          case "level":
+            level = event.level;
+            break;
+
+          case "labels":
+            LABELS = Object.assign(LABELS, event.labels);
+            doneBtn.textContent = LABELS.placement_done;
+            break;
+
+          case "scale":
+            // Content scales with the window so the card stays proportionate.
+            document.body.style.zoom = event.scale || 1;
+            break;
+
+          case "placement":
+            document.body.classList.toggle("placing", Boolean(event.active));
+            if (event.active) {
+              clearCover();
+              hud.classList.add("show");
+              hud.classList.remove("matched", "nomatch", "playing");
+              label.textContent = LABELS.listening;
+              title.textContent = LABELS.placement;
+              title.classList.remove("dim");
+            }
+            break;
+
+          case "wake":
+            hud.classList.remove("matched", "nomatch");
+            clearCover();
+            label.textContent = LABELS.armed;
+            title.textContent = "…";
+            title.classList.add("dim");
+            hud.classList.add("show");
+            break;
+
+          case "state":
+            if (LABELS[event.state] && !hud.classList.contains("playing")) {
+              label.textContent = LABELS[event.state];
+            }
+            if (["armed", "recording", "transcribing", "executing"].indexOf(event.state) !== -1) {
+              hud.classList.add("show");
+            } else if (!document.body.classList.contains("placing")) {
+              hud.classList.remove("show");
+              level = 0;
+            }
+            break;
+
+          case "transcript":
+            if (event.text) {
+              title.textContent = event.text;
+              title.classList.remove("dim");
+            }
+            hud.classList.toggle("matched", Boolean(event.matched));
+            hud.classList.toggle("nomatch", !event.matched);
+            label.textContent = event.matched ? event.matched.toUpperCase() : LABELS.no_match;
+            break;
+
+          case "now_playing":
+            showCover(event);
+            break;
+
+          case "spotify_error":
+            hud.classList.remove("playing", "matched");
+            hud.classList.add("nomatch", "show");
+            label.textContent = "SPOTIFY";
+            title.textContent = event.error || "";
+            title.classList.remove("dim");
+            break;
+        }
+      };
+    </script>
+  </body>
+</html>
