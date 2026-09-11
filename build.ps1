@@ -89,6 +89,13 @@ Invoke-Native 'PyInstaller (updater)' uv run pyinstaller --noconfirm --onefile `
     --paths 'src' `
     'entrypoints\updater.py'
 
+# --- sounds -------------------------------------------------------------------
+# The installer takes these from the repository, but copying them next to the
+# executable makes dist\ runnable on its own for a quick local check.
+Write-Step 'Copying sounds'
+New-Item -ItemType Directory -Force -Path 'dist\sounds' | Out-Null
+Copy-Item 'sounds\*' 'dist\sounds' -Force -Recurse
+
 # --- installer ----------------------------------------------------------------
 if (-not $SkipInstaller) {
     $iscc = @(
